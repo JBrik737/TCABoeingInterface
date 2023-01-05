@@ -48,8 +48,8 @@
     <TargetExt>.xpl</TargetExt>
     <GenerateManifest>false</GenerateManifest>
     <TargetName>win</TargetName>
-    <IncludePath>D:\Devel\Xplane SDK\CHeaders\XPLM;$(IncludePath)</IncludePath>
-    <LibraryPath>D:\Devel\Xplane SDK\Libraries\Win;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\Devel\Xplane SDK\CHeaders\XPLM;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\Devel\Xplane SDK\Libraries\Win;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>.\Debug\plugins\$(TargetName)\64\</OutDir>
@@ -58,8 +58,8 @@
     <TargetExt>.xpl</TargetExt>
     <GenerateManifest>false</GenerateManifest>
     <TargetName>win</TargetName>
-    <IncludePath>D:\Devel\Xplane SDK\CHeaders\XPLM;$(IncludePath)</IncludePath>
-    <LibraryPath>D:\Devel\Xplane SDK\Libraries\Win;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\Devel\Xplane SDK\CHeaders\XPLM;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\Devel\Xplane SDK\Libraries\Win;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
