@@ -63,6 +63,10 @@ const string versionNumber = "0.1";
 
 #pragma region Deklarace
 
+const int IAS = 1;
+const int HDG = 2;
+const int ALT = 3;
+
 XPLMDataRef dr_McpAltitude = NULL;
 XPLMDataRef dr_McpHeading = NULL;
 XPLMDataRef dr_McpSpeed = NULL;
@@ -78,9 +82,10 @@ XPLMCommandRef cmd_Tca_Increase = NULL;
 XPLMCommandRef cmd_Tca_SelPress = NULL;
 XPLMCommandRef cmd_Tca_IAS = NULL;
 XPLMCommandRef cmd_Tca_HDG = NULL;
-XPLMCommandRef cmc_Tca_ALT = NULL;
+XPLMCommandRef cmd_Tca_ALT = NULL;
 
 uint64_t PrevTime = 0;
+int CurrentMode = HDG;
 
 #pragma endregion
 
@@ -94,6 +99,10 @@ uint64_t MsSinceEpoch()
 {
 	return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 }
+
+#pragma endregion
+
+#pragma region Hlavni funkce
 
 /*
 	altref = "laminar/B738/autopilot/mcp_alt_dial"
@@ -135,6 +144,202 @@ void GetDefaultDrefs()
 	cmd_McpLvlChg = XPLMFindCommand("sim/autopilot/level_change");
 }
 
+void SpdDecrease()
+{
+	float spd = XPLMGetDataf(dr_McpSpeed);
+	uint64_t time = MsSinceEpoch();
+
+	if ((time - PrevTime) > 200) spd -= 1;
+		else spd -= 20;
+
+	if (spd < 100) spd = 100;
+
+	PrevTime = time;
+
+	XPLMSetDataf(dr_McpSpeed, spd);
+}
+
+void SpdIncrease()
+{
+	float spd = XPLMGetDataf(dr_McpSpeed);
+	uint64_t time = MsSinceEpoch();
+
+	if ((time - PrevTime) > 200) spd += 1;
+	else spd += 20;
+
+	PrevTime = time;
+
+	XPLMSetDataf(dr_McpSpeed, spd);
+}
+
+void HdgDecrease()
+{
+	int hdg = XPLMGetDatai(dr_McpHeading);
+	uint64_t time = MsSinceEpoch();
+
+	if ((time - PrevTime) > 200) hdg -= 1;
+	else hdg -= 10;
+
+	PrevTime = time;
+
+	XPLMSetDatai(dr_McpHeading, hdg % 360);
+}
+
+void HdgIncrease()
+{
+	int hdg = XPLMGetDatai(dr_McpHeading);
+	uint64_t time = MsSinceEpoch();
+
+	if ((time - PrevTime) > 200) hdg += 1;
+	else hdg += 10;
+
+	PrevTime = time;
+
+	XPLMSetDatai(dr_McpHeading, hdg % 360);
+}
+
+void AltDecrease()
+{
+	int alt = XPLMGetDatai(dr_McpAltitude);
+	uint64_t time = MsSinceEpoch();
+
+	if ((time - PrevTime) < 200) alt -= 1000;
+	else
+		if ((time - PrevTime) < 400) alt -= 500;
+	else alt -= 100;
+
+	PrevTime = time;
+
+	if (alt < 0) alt = 0;
+
+	XPLMSetDatai(dr_McpAltitude, ceil(alt / 100.0) * 100);
+}
+
+void AltIncrease()
+{
+	int alt = XPLMGetDatai(dr_McpAltitude);
+	uint64_t time = MsSinceEpoch();
+
+	if ((time - PrevTime) < 200) alt += 1000;
+	else
+		if ((time - PrevTime) < 400) alt += 500;
+		else alt += 100;
+
+	PrevTime = time;
+
+	if ((ceil(alt / 100.0) * 100) <= 50001)
+		XPLMSetDatai(dr_McpAltitude, ceil(alt / 100.0) * 100);
+}
+
+#pragma endregion
+
+#pragma region Commands a jejich handlery
+
+int iasModeCmdHandler(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void* inRefcon)
+{
+	if (inPhase == xplm_CommandBegin)
+		CurrentMode = IAS;
+	return 0;
+}
+
+int hdgModeCmdHandler(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void* inRefcon)
+{
+	if (inPhase == xplm_CommandBegin)
+		CurrentMode = HDG;
+	return 0;
+}
+
+int altModeCmdHandler(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void* inRefcon)
+{
+	if (inPhase == xplm_CommandBegin)
+		CurrentMode = ALT;
+	return 0;
+}
+
+int rotaryDecCmdHandler(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void* inRefcon)
+{
+	if (inPhase == xplm_CommandBegin)
+		switch (CurrentMode)
+		{
+		case IAS:
+			SpdDecrease();
+			break;
+		case HDG:
+			HdgDecrease();
+			break;
+		case ALT:
+			AltDecrease();
+			break;
+		}
+	return 0;
+}
+
+int rotaryIncCmdHandler(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void* inRefcon)
+{
+	if (inPhase == xplm_CommandBegin)
+		switch (CurrentMode)
+		{
+		case IAS:
+			SpdIncrease();
+			break;
+		case HDG:
+			HdgIncrease();
+			break;
+		case ALT:
+			AltIncrease();
+			break;
+		}
+		return 0;
+}
+
+int selPressCmdHandler(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void* inRefcon)
+{
+	if (inPhase == xplm_CommandBegin)
+	{
+		switch (CurrentMode)
+		{
+		case IAS: 
+			XPLMCommandOnce(cmd_McpLvlChg);
+			break;
+		case HDG: 
+			XPLMCommandOnce(cmd_McpHdgSel);
+			break;
+		case ALT: 
+			XPLMCommandOnce(cmd_McpAltHld);
+			break;
+		}
+	}
+	return 0;
+}
+
+
+void EnableCommands() 
+{
+	cmd_Tca_Decrease = XPLMCreateCommand("jbr/BoeingTCA/rotary_dec", "Rotary knob decrement (turn left)");
+	cmd_Tca_Increase = XPLMCreateCommand("jbr/BoeingTCA/rotary_inc", "Rotary knob increment (turn right)");
+	cmd_Tca_SelPress = XPLMCreateCommand("jbr/BoeingTCA/sel_press", "SEL button press");
+	cmd_Tca_IAS		 = XPLMCreateCommand("jbr/BoeingTCA/ias_mode", "IAS mode selected");
+	cmd_Tca_HDG		 = XPLMCreateCommand("jbr/BoeingTCA/hdg_mode", "HDG mode selected");
+	cmd_Tca_ALT		 = XPLMCreateCommand("jbr/BoeingTCA/alt_mode", "ALT mode selected");
+
+	XPLMRegisterCommandHandler(cmd_Tca_Decrease, rotaryDecCmdHandler, 1, (void*)0);
+	XPLMRegisterCommandHandler(cmd_Tca_Increase, rotaryIncCmdHandler, 1, (void*)0);
+	XPLMRegisterCommandHandler(cmd_Tca_SelPress, selPressCmdHandler, 1, (void*)0);
+	XPLMRegisterCommandHandler(cmd_Tca_IAS, iasModeCmdHandler, 1, (void*)0);
+	XPLMRegisterCommandHandler(cmd_Tca_HDG, hdgModeCmdHandler, 1, (void*)0);
+	XPLMRegisterCommandHandler(cmd_Tca_ALT, altModeCmdHandler, 1, (void*)0);
+}
+
+void DisableCommands() 
+{
+	XPLMUnregisterCommandHandler(cmd_Tca_Decrease, rotaryDecCmdHandler, 0, 0);
+	XPLMUnregisterCommandHandler(cmd_Tca_Increase, rotaryIncCmdHandler, 0, 0);
+	XPLMUnregisterCommandHandler(cmd_Tca_SelPress, selPressCmdHandler, 0, 0);
+	XPLMUnregisterCommandHandler(cmd_Tca_IAS, iasModeCmdHandler, 0, 0);
+	XPLMUnregisterCommandHandler(cmd_Tca_HDG, hdgModeCmdHandler, 0, 0);
+	XPLMUnregisterCommandHandler(cmd_Tca_ALT, altModeCmdHandler, 0, 0);
+}
+
 #pragma endregion
 
 /*
@@ -145,6 +350,12 @@ PLUGIN_API int XPluginStart(char* outName, char* outSig, char* outDesc) {
 	strcpy(outSig, "jbr.boeing.tca");
 	strcpy(outDesc, "Interface plugin for Thrustmaster Boeing TCA throttle quadrant");
 
+#if APL
+	XPLMEnableFeature("XPLM_USE_NATIVE_PATHS", 1);
+#endif
+
+	EnableCommands();
+
 	return 1;
 }
 
@@ -152,7 +363,7 @@ PLUGIN_API int XPluginStart(char* outName, char* outSig, char* outDesc) {
  *  The XPluginStop function is called by X-Plane right before the DLL is unloaded.
  *  The plugin will be disabled (if it was enabled) before this routine is called.
  */
-PLUGIN_API void XPluginStop(void) { }
+PLUGIN_API void XPluginStop(void) { DisableCommands(); }
 
 /*
  *  The XPluginEnable function is called by X-Plane right before the plugin is enabled.
@@ -182,22 +393,6 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID, long msg, void*)
 			if (acfDescription == "Boeing 737 - 800X") GetZiboDrefs();
 				else GetDefaultDrefs();
 
-
-
 			break;
 	}
 }
-
-
-/*
-
-int frontStairCmdHandler(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void* inRefcon)
-{
-	if (inPhase == xplm_CommandEnd && (ZiboLoaded || DefaultLoaded))
-		processMenuItem(foreStairs, 0, overrideFront);
-	return 0;
-}
-
-    cmd_FrontStairs = XPLMCreateCommand("jbr/737ghe/toggles/front_stair", "Toggle front stairs");
-	XPLMRegisterCommandHandler(cmd_FrontStairs, frontStairCmdHandler, 1, (void*)0);
-*/
