@@ -85,19 +85,30 @@ XPLMCommandRef cmd_Tca_HDG = NULL;
 XPLMCommandRef cmd_Tca_ALT = NULL;
 
 uint64_t PrevTime = 0;
+uint64_t CurrTime = 0;
 int CurrentMode = HDG;
+
+int i = 1;
+bool fast = true;
+int interval = 150;
 
 #pragma endregion
 
 #pragma region Pomocne funkce
 
 void LogDebugString(string msg, bool debug = true) {
-	if (debug) XPLMDebugString(("Boeing TCA Interface - " + msg).c_str());
+	if (debug) XPLMDebugString(("Boeing TCA Interface - " + msg + "\n").c_str());
+	//if (debug) XPLMSpeakString(("Boeing TCA Interface - " + msg + "\n").c_str());
 }
 
 uint64_t MsSinceEpoch() 
 {
 	return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+}
+
+uint64_t SecSinceEpoch()
+{
+	return duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
 }
 
 #pragma endregion
@@ -122,6 +133,8 @@ void GetZiboDrefs()
 	cmd_McpAltHld = XPLMFindCommand("laminar/B738/autopilot/alt_hld_press");
 	cmd_McpHdgSel = XPLMFindCommand("laminar/B738/autopilot/hdg_sel_press");
 	cmd_McpLvlChg = XPLMFindCommand("laminar/B738/autopilot/lvl_chg_press");
+
+	LogDebugString("Zibo datarefs");
 }
 
 /*
@@ -142,19 +155,20 @@ void GetDefaultDrefs()
 	cmd_McpAltHld = XPLMFindCommand("sim/autopilot/altitude_hold");
 	cmd_McpHdgSel = XPLMFindCommand("sim/autopilot/heading");
 	cmd_McpLvlChg = XPLMFindCommand("sim/autopilot/level_change");
+
+	LogDebugString("Default datarefs");
 }
 
 void SpdDecrease()
 {
 	float spd = XPLMGetDataf(dr_McpSpeed);
-	uint64_t time = MsSinceEpoch();
 
-	if ((time - PrevTime) > 200) spd -= 1;
-		else spd -= 20;
+	CurrTime = MsSinceEpoch();
+	if ((CurrTime - PrevTime) < interval) fast = true; else fast = false;
+	PrevTime = CurrTime;
 
+	if (fast) spd -= 10; else spd -= 1;
 	if (spd < 100) spd = 100;
-
-	PrevTime = time;
 
 	XPLMSetDataf(dr_McpSpeed, spd);
 }
@@ -162,12 +176,12 @@ void SpdDecrease()
 void SpdIncrease()
 {
 	float spd = XPLMGetDataf(dr_McpSpeed);
-	uint64_t time = MsSinceEpoch();
 
-	if ((time - PrevTime) > 200) spd += 1;
-	else spd += 20;
+	CurrTime = MsSinceEpoch();
+	if ((CurrTime - PrevTime) < interval) fast = true; else fast = false;
+	PrevTime = CurrTime;
 
-	PrevTime = time;
+	if (fast) spd += 10; else spd += 1;
 
 	XPLMSetDataf(dr_McpSpeed, spd);
 }
@@ -175,60 +189,59 @@ void SpdIncrease()
 void HdgDecrease()
 {
 	int hdg = XPLMGetDatai(dr_McpHeading);
-	uint64_t time = MsSinceEpoch();
 
-	if ((time - PrevTime) > 200) hdg -= 1;
-	else hdg -= 10;
+	CurrTime = MsSinceEpoch();
+	if ((CurrTime - PrevTime) < interval) fast = true; else fast = false;
+	PrevTime = CurrTime;
 
-	PrevTime = time;
+	if (fast) hdg -= 10; else hdg -= 1;
 
-	XPLMSetDatai(dr_McpHeading, hdg % 360);
+	if (hdg < 0) hdg += 360;
+
+	XPLMSetDatai(dr_McpHeading, hdg);
 }
 
 void HdgIncrease()
 {
 	int hdg = XPLMGetDatai(dr_McpHeading);
-	uint64_t time = MsSinceEpoch();
 
-	if ((time - PrevTime) > 200) hdg += 1;
-	else hdg += 10;
+	CurrTime = MsSinceEpoch();
+	if ((CurrTime - PrevTime) < interval) fast = true; else fast = false;
+	PrevTime = CurrTime;
 
-	PrevTime = time;
+	if (fast) hdg += 10; else hdg += 1;
 
-	XPLMSetDatai(dr_McpHeading, hdg % 360);
+	if (hdg >= 360) hdg -= 360;
+
+	XPLMSetDatai(dr_McpHeading, hdg);
 }
 
 void AltDecrease()
 {
 	int alt = XPLMGetDatai(dr_McpAltitude);
-	uint64_t time = MsSinceEpoch();
 
-	if ((time - PrevTime) < 200) alt -= 1000;
-	else
-		if ((time - PrevTime) < 400) alt -= 500;
-	else alt -= 100;
+	CurrTime = MsSinceEpoch();
+	if ((CurrTime - PrevTime) < interval) fast = true; else fast = false;
+	PrevTime = CurrTime;
 
-	PrevTime = time;
+	if (fast) alt -= 1000; else alt -= 100;
 
 	if (alt < 0) alt = 0;
 
-	XPLMSetDatai(dr_McpAltitude, ceil(alt / 100.0) * 100);
+	XPLMSetDatai(dr_McpAltitude, ceil(alt / 100) * 100);
 }
 
 void AltIncrease()
 {
 	int alt = XPLMGetDatai(dr_McpAltitude);
-	uint64_t time = MsSinceEpoch();
 
-	if ((time - PrevTime) < 200) alt += 1000;
-	else
-		if ((time - PrevTime) < 400) alt += 500;
-		else alt += 100;
+	CurrTime = MsSinceEpoch();
+	if ((CurrTime - PrevTime) < interval) fast = true; else fast = false;
+	PrevTime = CurrTime;
 
-	PrevTime = time;
+	if (fast) alt += 1000; else alt += 100;
 
-	if ((ceil(alt / 100.0) * 100) <= 50001)
-		XPLMSetDatai(dr_McpAltitude, ceil(alt / 100.0) * 100);
+	XPLMSetDatai(dr_McpAltitude, ceil(alt / 100) * 100);
 }
 
 #pragma endregion
@@ -238,27 +251,37 @@ void AltIncrease()
 int iasModeCmdHandler(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void* inRefcon)
 {
 	if (inPhase == xplm_CommandBegin)
+	{
 		CurrentMode = IAS;
+		//LogDebugString("Mode set - " + to_string(CurrentMode));
+	}
 	return 0;
 }
 
 int hdgModeCmdHandler(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void* inRefcon)
 {
 	if (inPhase == xplm_CommandBegin)
+	{
 		CurrentMode = HDG;
+		//LogDebugString("Mode set - " + to_string(CurrentMode));
+	}
 	return 0;
 }
 
 int altModeCmdHandler(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void* inRefcon)
 {
 	if (inPhase == xplm_CommandBegin)
+	{
 		CurrentMode = ALT;
+		//LogDebugString("Mode set - " + to_string(CurrentMode));
+	}
 	return 0;
 }
 
 int rotaryDecCmdHandler(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void* inRefcon)
 {
 	if (inPhase == xplm_CommandBegin)
+	{
 		switch (CurrentMode)
 		{
 		case IAS:
@@ -271,12 +294,14 @@ int rotaryDecCmdHandler(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void
 			AltDecrease();
 			break;
 		}
+	}
 	return 0;
 }
 
 int rotaryIncCmdHandler(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void* inRefcon)
 {
 	if (inPhase == xplm_CommandBegin)
+	{
 		switch (CurrentMode)
 		{
 		case IAS:
@@ -289,7 +314,8 @@ int rotaryIncCmdHandler(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void
 			AltIncrease();
 			break;
 		}
-		return 0;
+	}
+	return 0;
 }
 
 int selPressCmdHandler(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void* inRefcon)
@@ -309,6 +335,7 @@ int selPressCmdHandler(XPLMCommandRef inCommand, XPLMCommandPhase inPhase, void*
 			break;
 		}
 	}
+	// LogDebugString("SEL PRESS " + to_string(CurrentMode));
 	return 0;
 }
 
@@ -381,7 +408,8 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID, long msg, void*)
 {
 	switch (msg)
 	{
-		case XPLM_MSG_PLANE_LOADED:
+	case XPLM_MSG_AIRPORT_LOADED:
+	case XPLM_MSG_PLANE_LOADED:
 			LogDebugString("PLANE_LOADED\n");
 
 			char acfDescription[512];
@@ -390,8 +418,12 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID, long msg, void*)
 			if (!dr_acfDesc) dr_acfDesc = XPLMFindDataRef("sim/aircraft/view/acf_descrip");
 			XPLMGetDatab(dr_acfDesc, acfDescription, 0, sizeof(acfDescription));
 
-			if (acfDescription == "Boeing 737 - 800X") GetZiboDrefs();
-				else GetDefaultDrefs();
+			LogDebugString(acfDescription);
+
+			if ((string)acfDescription == "Boeing 737-800X") GetZiboDrefs();
+			else GetDefaultDrefs();
+
+			PrevTime = SecSinceEpoch();
 
 			break;
 	}
