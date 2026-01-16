@@ -1,0 +1,1 @@
+X-Plane 11/12 plugin adding commands that can be bound to rotary knobs on the Thrustmaster TCA Boeing throttle. Rotary reading may glitch a little during quick rotation due to the way X-Plane processes datarefs/commands. Old project, not further developed, but somebody may find it useful.
